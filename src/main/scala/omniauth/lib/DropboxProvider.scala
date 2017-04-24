@@ -9,6 +9,7 @@ import json.JsonParser
 
 
 import dispatch.classic._
+import org.apache.http.HttpEntity
 
 class DropboxProvider (val key:String, val secret:String) extends OmniauthProvider{
   implicit val formats = net.liftweb.json.DefaultFormats
@@ -17,7 +18,7 @@ class DropboxProvider (val key:String, val secret:String) extends OmniauthProvid
   def callbackUrl = Omniauth.siteAuthBaseUrl+"auth/"+providerName+"/callback"
   
   def signIn() = {
-    val baseReqUrl = "https://www.dropbox.com/1/oauth2/authorize?"
+    val baseReqUrl = "https://www.dropbox.com/oauth2/authorize?"
     val params = Map(
       "client_id" -> key,
       "response_type" -> "code",
@@ -31,7 +32,7 @@ class DropboxProvider (val key:String, val secret:String) extends OmniauthProvid
     execWithStateValidation {
       S.param("code") match {
         case Full(code) => {
-          val req = :/("api.dropbox.com").secure / "1/oauth2/token" << Map(
+          val req = :/("api.dropbox.com").secure / "oauth2/token" << Map(
             "code" -> code,
             "grant_type" -> "authorization_code",
             "redirect_uri" -> callbackUrl,
@@ -87,17 +88,15 @@ class DropboxProvider (val key:String, val secret:String) extends OmniauthProvid
     case (res, name, uid) => Full(uid)
     case _ => Empty
   }
-  
-  
-  def accountInfo(accessToken:AuthToken) = {
-    val req = :/("api.dropbox.com").secure / "1/account/info" << Map(
-      "locale" -> S.locale.getLanguage()) <:< Map(
-      "Authorization" -> ("Bearer "+accessToken.token))
 
+
+  def accountInfo(accessToken:AuthToken) = {
+    val req = ((:/("api.dropboxapi.com").secure / "2/users/get_current_account").POST <:< Map(
+      "Authorization" -> ("Bearer " + accessToken.token)
+    )).copy(body = None)
     val res = Omniauth.http(req >- JsonParser.parse)
-    val name = (res \ "display_name").extract[String]
-    val uid = (res \ "uid").extract[String]
-    
+    val name = (res \ "name" \ "display_name").extract[String]
+    val uid = (res \ "account_id").extract[String]
     (res, name, uid)
   }
 }
